@@ -94,6 +94,40 @@ defmodule Tp1Taller.Processes.FlightServer do
   end
 end
 
+defp handle_message({:cancel, reservation_id, from}, state) do
+  case Map.get(state.reservations, reservation_id) do
+    nil ->
+      send(from, {:error, :reservation_not_found})
+      state
+
+    reservation ->
+      if reservation.status != :pending do
+        send(from, {:error, :invalid_reservation_state})
+        state
+      else
+        seat = Map.get(state.seats, reservation.seat_id)
+
+        updated_reservation = %{
+          reservation | status: :cancelled
+        }
+
+        updated_seat = %{
+          seat | status: :available, reservation_id: nil
+        }
+
+        new_state = %{
+          state
+          | reservations: Map.put(state.reservations, reservation_id, updated_reservation),
+            seats: Map.put(state.seats, seat.id, updated_seat)
+        }
+
+        send(from, {:ok, reservation_id})
+
+        new_state
+      end
+  end
+end
+
 defp handle_message({:confirm, reservation_id, from}, state) do
   case Map.get(state.reservations, reservation_id) do
     nil ->
