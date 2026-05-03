@@ -1,6 +1,4 @@
 defmodule Tp1Taller.Processes.FlightServer do
-  alias Tp1Taller.Domain.Flight
-
   #crea un nuevo proceso concurrente y con register le asigna un nombre global.
   def start_link(initial_flight) do
     pid = spawn_link(fn -> loop(initial_flight) end)
@@ -37,6 +35,7 @@ defmodule Tp1Taller.Processes.FlightServer do
       true ->
         reservation_id = make_ref()
 
+        #asigno a cada una de las partes su id y al status lo seteo como pending hasta que se expire, cancele o confirme
         reservation = %{
           id: reservation_id,
           passenger_id: passenger_id,
@@ -62,44 +61,47 @@ defmodule Tp1Taller.Processes.FlightServer do
 
   #funcion para manejar reserva que no se confirmo
   defp handle_message({:expire_reservation, reservation_id}, state) do
-  case Map.get(state.reservations, reservation_id) do
-    #si no existe, no hago nada
-    nil ->
-      state
-
-    #si existe, en caso de que este pendiente la elimino
-    reservation ->
-      if reservation.status == :pending do
-        seat = Map.get(state.seats, reservation.seat_id)
-
-        updated_seat = %{
-          seat
-          | status: :available,
-            reservation_id: nil
-        }
-
-        updated_reservation = %{
-          reservation
-          | status: :expired
-        }
-
-        %{
-          state
-          | seats: Map.put(state.seats, seat.id, updated_seat),
-            reservations: Map.put(state.reservations, reservation_id, updated_reservation)
-        }
-      else
+    case Map.get(state.reservations, reservation_id) do
+      #si no existe, no hago nada
+      nil ->
         state
-      end
-  end
-end
 
+      #si existe, en caso de que este pendiente la elimino
+      reservation ->
+        if reservation.status == :pending do
+          seat = Map.get(state.seats, reservation.seat_id)
+
+          updated_seat = %{
+            seat
+            | status: :available,
+              reservation_id: nil
+          }
+
+          updated_reservation = %{
+            reservation
+            | status: :expired
+          }
+
+          %{
+            state
+            | seats: Map.put(state.seats, seat.id, updated_seat),
+              reservations: Map.put(state.reservations, reservation_id, updated_reservation)
+          }
+        else
+          state
+        end
+    end
+  end
+
+  #funcion para manejar cancelacion de una reserva
   defp handle_message({:cancel, reservation_id, from}, state) do
     case Map.get(state.reservations, reservation_id) do
+      #si no se encuentra, tiro error
       nil ->
         send(from, {:error, :reservation_not_found})
         state
 
+      #si se encuentra y no esta pending, tiro error. Si esta pending, la cancelo
       reservation ->
         if reservation.status != :pending do
           send(from, {:error, :invalid_reservation_state})
@@ -128,17 +130,21 @@ end
     end
   end
 
+  #funcion para confirmar reserva
   defp handle_message({:confirm, reservation_id, from}, state) do
     case Map.get(state.reservations, reservation_id) do
+      #si no se encuentra, tiro error
       nil ->
         send(from, {:error, :reservation_not_found})
         state
 
+      #si se encuentra y no esta pending tiro error. Si esta pending, la confirmo
       reservation ->
         if reservation.status != :pending do
           send(from, {:error, :invalid_reservation_state})
           state
         else
+          #manejo de confirmacion con monitor
           pid =
             spawn(fn ->
               Process.sleep(1000)
@@ -154,6 +160,7 @@ end
     end
   end
 
+  #funcion para manejar la confirmacion con monitor
   defp handle_message({:payment_ok, reservation_id, from}, state) do
     case Map.get(state.reservations, reservation_id) do
       nil ->
@@ -177,10 +184,5 @@ end
           state
         end
     end
-  end
-
-  defp handle_message(msg, state) do
-    IO.puts("Mensaje recibido: #{inspect(msg)}")
-    state
   end
 end
