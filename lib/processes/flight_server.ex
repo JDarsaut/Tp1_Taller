@@ -94,73 +94,95 @@ defmodule Tp1Taller.Processes.FlightServer do
   end
 end
 
-defp handle_message({:cancel, reservation_id, from}, state) do
-  case Map.get(state.reservations, reservation_id) do
-    nil ->
-      send(from, {:error, :reservation_not_found})
-      state
-
-    reservation ->
-      if reservation.status != :pending do
-        send(from, {:error, :invalid_reservation_state})
+  defp handle_message({:cancel, reservation_id, from}, state) do
+    case Map.get(state.reservations, reservation_id) do
+      nil ->
+        send(from, {:error, :reservation_not_found})
         state
-      else
-        seat = Map.get(state.seats, reservation.seat_id)
 
-        updated_reservation = %{
-          reservation | status: :cancelled
-        }
-
-        updated_seat = %{
-          seat | status: :available, reservation_id: nil
-        }
-
-        new_state = %{
+      reservation ->
+        if reservation.status != :pending do
+          send(from, {:error, :invalid_reservation_state})
           state
-          | reservations: Map.put(state.reservations, reservation_id, updated_reservation),
-            seats: Map.put(state.seats, seat.id, updated_seat)
-        }
+        else
+          seat = Map.get(state.seats, reservation.seat_id)
 
-        send(from, {:ok, reservation_id})
+          updated_reservation = %{
+            reservation | status: :cancelled
+          }
 
-        new_state
-      end
+          updated_seat = %{
+            seat | status: :available, reservation_id: nil
+          }
+
+          new_state = %{
+            state
+            | reservations: Map.put(state.reservations, reservation_id, updated_reservation),
+              seats: Map.put(state.seats, seat.id, updated_seat)
+          }
+
+          send(from, {:ok, reservation_id})
+
+          new_state
+        end
+    end
   end
-end
 
-defp handle_message({:confirm, reservation_id, from}, state) do
-  case Map.get(state.reservations, reservation_id) do
-    nil ->
-      send(from, {:error, :reservation_not_found})
-      state
-
-    reservation ->
-      if reservation.status != :pending do
-        send(from, {:error, :invalid_reservation_state})
+  defp handle_message({:confirm, reservation_id, from}, state) do
+    case Map.get(state.reservations, reservation_id) do
+      nil ->
+        send(from, {:error, :reservation_not_found})
         state
-      else
-        seat = Map.get(state.seats, reservation.seat_id)
 
-        updated_reservation = %{
-          reservation | status: :confirmed
-        }
-
-        updated_seat = %{
-          seat | status: :confirmed
-        }
-
-        new_state = %{
+      reservation ->
+        if reservation.status != :pending do
+          send(from, {:error, :invalid_reservation_state})
           state
-          | reservations: Map.put(state.reservations, reservation_id, updated_reservation),
-            seats: Map.put(state.seats, seat.id, updated_seat)
-        }
+        else
+          pid =
+            spawn(fn ->
+              Process.sleep(1000)
+              send(:flight_server, {:payment_ok, reservation_id, from})
+            end)
 
-        send(from, {:ok, reservation_id})
+          Process.monitor(pid)
 
-        new_state
-      end
+          send(from, {:ok, :processing_payment})
+
+          state
+        end
+    end
   end
-end
+
+  defp handle_message({:payment_ok, reservation_id, from}, state) do
+    case Map.get(state.reservations, reservation_id) do
+      nil ->
+        state
+
+      reservation ->
+        if reservation.status == :pending do
+          seat = Map.get(state.seats, reservation.seat_id)
+
+          updated_reservation = %{reservation | status: :confirmed}
+          updated_seat = %{seat | status: :confirmed}
+
+          send(from, {:payment_confirmed, reservation_id})
+
+          %{
+            state
+            | reservations: Map.put(state.reservations, reservation_id, updated_reservation),
+              seats: Map.put(state.seats, seat.id, updated_seat)
+          }
+        else
+          state
+        end
+    end
+  end
+
+  defp handle_message({:DOWN, _ref, :process, _pid, reason}, state) do
+    IO.puts("Proceso monitoreado terminó con razón: #{inspect(reason)}")
+    state
+  end
 
   defp handle_message(msg, state) do
     IO.puts("Mensaje recibido: #{inspect(msg)}")
