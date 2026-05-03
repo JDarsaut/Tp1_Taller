@@ -34,7 +34,6 @@ Se encarga de:
 * Validar reglas de negocio
 
 
-
 ### 🔹 ReservationExpirer (proceso auxiliar)
 
 Proceso temporal que:
@@ -43,7 +42,6 @@ Proceso temporal que:
 * envia un mensaje para expirar la reserva
 
 Permite modelar tareas asincronicas sin bloquear el sistema.
-
 
 
 ### 🔹 Procesos cliente
@@ -65,16 +63,6 @@ Simulan pasajeros que:
 | `:confirmed` | Confirmada               |
 | `:cancelled` | Cancelada por usuario    |
 | `:expired`   | Expirada automaticamente |
-
----
-
-### Transiciones validas
-
-```text
-pending → confirmed
-pending → cancelled
-pending → expired
-```
 
 ---
 
@@ -129,7 +117,11 @@ La demo muestra:
 
 ## Tests
 
-me falta incluir los test
+* reservas de asientos
+* manejo de concurrencia
+* confirmación de reservas (con procesamiento asincrónico)
+* cancelación de reservas
+* expiración automática
 
 ---
 
