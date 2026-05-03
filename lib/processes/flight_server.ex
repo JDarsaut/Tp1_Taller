@@ -179,11 +179,6 @@ end
     end
   end
 
-  defp handle_message({:DOWN, _ref, :process, _pid, reason}, state) do
-    IO.puts("Proceso monitoreado terminó con razón: #{inspect(reason)}")
-    state
-  end
-
   defp handle_message(msg, state) do
     IO.puts("Mensaje recibido: #{inspect(msg)}")
     state
